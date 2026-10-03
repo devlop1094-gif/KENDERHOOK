@@ -1,0 +1,247 @@
+local FREE_URL    = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/kenderhook_free.lua"
+local PREMIUM_URL = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/kenderhook_premium.lua"
+local KEYS_URL    = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/premium_keys.json"
+
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+
+local function httpGet(url)
+    local ok, res = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+    if ok and type(res) == "string" and #res > 0 then
+        return res
+    end
+    return nil
+end
+
+-- Load premium keys from remote JSON (fallback to local hardcodes if fetch fails)
+local function loadPremiumKeys()
+    local map = {}
+    local raw = httpGet(KEYS_URL)
+    if raw then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(raw)
+        end)
+        if ok and type(data) == "table" and type(data.keys) == "table" then
+            for _, entry in ipairs(data.keys) do
+                if type(entry) == "table" and type(entry.key) == "string" and entry.key ~= "" then
+                    if entry.active ~= false then
+                        -- optional expiry check (ISO date "YYYY-MM-DD" or null)
+                        local expired = false
+                        if type(entry.expires) == "string" and entry.expires ~= "" then
+                            local y, m, d = entry.expires:match("^(%d+)%-(%d+)%-(%d+)$")
+                            if y then
+                                local exp = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = 23, min = 59 })
+                                if os.time() > exp then
+                                    expired = true
+                                end
+                            end
+                        end
+                        if not expired then
+                            map[entry.key] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    -- fallback hardcoded if json empty / fail
+    if next(map) == nil then
+        map["KENDER-PREMIUM-2026"] = true
+        map["KH-PREM-RIVALS"] = true
+        map["trial-premium"] = true
+    end
+    return map
+end
+
+local PREMIUM_KEYS = loadPremiumKeys()
+
+local function isValidPremiumKey(key)
+    if not key or key == "" then
+        return false
+    end
+    return PREMIUM_KEYS[key] == true
+end
+
+local function loadScript(src, isPremium)
+    if not src then
+        warn("[KENDERHOOK] failed to fetch script")
+        return
+    end
+    getgenv().KENDERHOOK_PREMIUM = isPremium and true or false
+    getgenv().script_key = isPremium and (getgenv().script_key or "premium") or "free"
+    local fn, err = loadstring(src)
+    if not fn then
+        warn("[KENDERHOOK] compile error:", err)
+        return
+    end
+    local ok, rerr = pcall(fn)
+    if not ok then
+        warn("[KENDERHOOK] runtime error:", rerr)
+    end
+end
+
+-- Auto-path if key already set in getgenv
+local existing = tostring(getgenv().script_key or getgenv().Key or ""):gsub("%s+", "")
+if existing ~= "" and isValidPremiumKey(existing) then
+    local src = httpGet(PREMIUM_URL)
+    loadScript(src, true)
+    return
+elseif existing == "free" then
+    local src = httpGet(FREE_URL)
+    loadScript(src, false)
+    return
+end
+
+-- Loader UI
+local gui = Instance.new("ScreenGui")
+gui.Name = "KenderhookLoader"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+gui.DisplayOrder = 99999
+pcall(function()
+    if syn and syn.protect_gui then syn.protect_gui(gui) end
+end)
+gui.Parent = (gethui and gethui()) or CoreGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.fromOffset(320, 180)
+frame.Position = UDim2.fromScale(0.5, 0.5)
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+frame.BorderSizePixel = 0
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
+
+local accent = Instance.new("Frame")
+accent.Size = UDim2.new(1, 0, 0, 3)
+accent.BackgroundColor3 = Color3.fromHex("a65d67")
+accent.BorderSizePixel = 0
+accent.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.BackgroundTransparency = 1
+title.Size = UDim2.new(1, -20, 0, 28)
+title.Position = UDim2.fromOffset(10, 12)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextColor3 = Color3.fromRGB(240, 240, 240)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Text = "KENDERHOOK"
+title.Parent = frame
+
+local sub = Instance.new("TextLabel")
+sub.BackgroundTransparency = 1
+sub.Size = UDim2.new(1, -20, 0, 18)
+sub.Position = UDim2.fromOffset(10, 38)
+sub.Font = Enum.Font.Gotham
+sub.TextSize = 12
+sub.TextColor3 = Color3.fromRGB(150, 150, 150)
+sub.TextXAlignment = Enum.TextXAlignment.Left
+sub.Text = "enter premium key or continue free"
+sub.Parent = frame
+
+local box = Instance.new("TextBox")
+box.Size = UDim2.new(1, -24, 0, 32)
+box.Position = UDim2.fromOffset(12, 68)
+box.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+box.BorderSizePixel = 0
+box.Font = Enum.Font.Code
+box.TextSize = 14
+box.TextColor3 = Color3.fromRGB(230, 230, 230)
+box.PlaceholderText = "premium key (optional)"
+box.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+box.ClearTextOnFocus = false
+box.Text = ""
+box.Parent = frame
+
+local boxCorner = Instance.new("UICorner")
+boxCorner.CornerRadius = UDim.new(0, 4)
+boxCorner.Parent = box
+
+local status = Instance.new("TextLabel")
+status.BackgroundTransparency = 1
+status.Size = UDim2.new(1, -20, 0, 16)
+status.Position = UDim2.fromOffset(10, 106)
+status.Font = Enum.Font.Gotham
+status.TextSize = 11
+status.TextColor3 = Color3.fromRGB(160, 160, 160)
+status.TextXAlignment = Enum.TextXAlignment.Left
+status.Text = ""
+status.Parent = frame
+
+local function makeBtn(text, xScale, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0.46, 0, 0, 30)
+    b.Position = UDim2.new(xScale, 0, 0, 130)
+    b.BackgroundColor3 = color
+    b.BorderSizePixel = 0
+    b.Font = Enum.Font.GothamMedium
+    b.TextSize = 13
+    b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Text = text
+    b.AutoButtonColor = true
+    b.Parent = frame
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 4)
+    c.Parent = b
+    return b
+end
+
+local freeBtn = makeBtn("Continue Free", 0.04, Color3.fromRGB(50, 50, 55))
+local premBtn = makeBtn("Load Premium", 0.50, Color3.fromHex("a65d67"))
+
+local loading = false
+
+local function startLoad(isPremium)
+    if loading then return end
+    loading = true
+    status.Text = isPremium and "loading premium..." or "loading free..."
+    status.TextColor3 = Color3.fromRGB(180, 180, 100)
+
+    task.spawn(function()
+        local url = isPremium and PREMIUM_URL or FREE_URL
+        local src = httpGet(url)
+        if not src or #src < 100 then
+            status.Text = "fetch failed - check github urls"
+            status.TextColor3 = Color3.fromRGB(255, 80, 80)
+            loading = false
+            return
+        end
+        gui:Destroy()
+        loadScript(src, isPremium)
+    end)
+end
+
+freeBtn.MouseButton1Click:Connect(function()
+    getgenv().script_key = "free"
+    startLoad(false)
+end)
+
+premBtn.MouseButton1Click:Connect(function()
+    local key = (box.Text or ""):gsub("%s+", "")
+    if key == "" then
+        status.Text = "í¤ê° ì ííì§ ììµëë¤"
+        status.TextColor3 = Color3.fromRGB(255, 80, 80)
+        return
+    end
+    -- refresh keys from json each attempt (in case you updated remote)
+    PREMIUM_KEYS = loadPremiumKeys()
+    if not isValidPremiumKey(key) then
+        status.Text = "í¤ê° ì ííì§ ììµëë¤"
+        status.TextColor3 = Color3.fromRGB(255, 80, 80)
+        return
+    end
+    getgenv().script_key = key
+    startLoad(true)
+end)
+
+box.FocusLost:Connect(function(enter)
+    if enter then
+        premBtn.MouseButton1Click:Fire()
+    end
+end)
