@@ -1,6 +1,6 @@
 local FREE_URL    = "https://raw.githubusercontent.com/devlop1094-gif/KENDERHOOK/refs/heads/main/kenderhook_free.lua"
 local PREMIUM_URL = "https://raw.githubusercontent.com/devlop1094-gif/KENDERHOOK/refs/heads/main/kenderhook_premium.lua"
-local KEYS_URL    = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/premium_keys.json"
+local KEYS_URL    = "https://raw.githubusercontent.com/devlop1094-gif/KENDERHOOK/refs/heads/main/premium_keys.json"
 
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
